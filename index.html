@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QR Scanner mit Lager-Auswahl</title>
+
+<meta name="theme-color" content="#0f172a" />
+<link rel="manifest" href="manifest.json" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="QR Scanner" />
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+body { font-family: Arial, sans-serif; background:#f8fafc; padding:16px; }
+h2, h3 { text-align:center; }
+#reader { width:100%; max-width:360px; margin:auto; }
+label, select, input, button { width:100%; max-width:360px; margin:6px auto; display:block; }
+#formContainer { background:white; padding:12px; border-radius:6px; box-shadow:0 0 8px #ccc; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+
+<h2>📱 QR-Code Scanner</h2>
+
+<select id="lager">
+<option value="">-- Lager auswählen --</option>
+<option>Reifenlager Anhänger</option>
+<option>Reifenlager Garagenbox 2</option>
+<option>Reifenlager Garagenbox 4</option>
+<option>Sonstige</option>
+</select>
+
+<button id="start" disabled>Scan starten</button>
+
+<div id="reader" class="hidden"></div>
+
+<div id="formContainer" class="hidden">
+<input id="name" placeholder="Name Vorname">
+<input id="fahrzeug" placeholder="Fahrzeug">
+<input id="moment" placeholder="Anzugsdrehmoment">
+<input id="schrauben" placeholder="Schrauben Muttern">
+<input id="tpms" placeholder="TPMS">
+<button id="save">Speichern</button>
+</div>
+
+<button id="export" class="hidden">CSV herunterladen</button>
+
+<script>
+const lager = document.getElementById('lager');
+const startBtn = document.getElementById('start');
+const reader = document.getElementById('reader');
+const form = document.getElementById('formContainer');
+const exportBtn = document.getElementById('export');
+
+let currentLager = "";
+let scanner;
+const rows = [];
+
+lager.onchange = () => startBtn.disabled = !lager.value;
+
+startBtn.onclick = () => {
+  currentLager = lager.value;
+  reader.classList.remove('hidden');
+  exportBtn.classList.remove('hidden');
+  scanner = new Html5Qrcode("reader");
+  scanner.start({facingMode:"environment"}, {fps:10, qrbox:250}, onScan);
+};
+
+function onScan() {
+  scanner.pause();
+  form.classList.remove('hidden');
+}
+
+document.getElementById('save').onclick = () => {
+  rows.push([
+    document.getElementById('name').value,
+    document.getElementById('fahrzeug').value,
+    document.getElementById('moment').value,
+    document.getElementById('schrauben').value,
+    document.getElementById('tpms').value
+  ]);
+  form.classList.add('hidden');
+  scanner.resume();
+};
+
+exportBtn.onclick = () => {
+  let csv = currentLager + "\n";
+  csv += "Name Vorname,Fahrzeug,Anzugsdrehmoment,Schrauben Muttern,TPMS\n";
+  rows.forEach(r => csv += r.map(v=>`"${v}"`).join(",")+"\n");
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
+  a.download = "lagerliste.csv";
+  a.click();
+};
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
