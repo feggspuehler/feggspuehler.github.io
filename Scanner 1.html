@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QR Scanner mit Lager-Auswahl</title>
+
+<!-- PWA Meta -->
+<meta name="theme-color" content="#0f172a" />
+<link rel="manifest" href="manifest.json" />
+
+<!-- iOS Support -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="QR Scanner" />
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+  body { font-family: Arial, sans-serif; background: #f8fafc; padding: 16px; }
+  h2, h3 { text-align: center; }
+  #reader { width: 100%; max-width: 360px; margin: 10px auto; }
+  label, select, input { display: block; margin: 6px 0; width: 100%; max-width: 360px; }
+  button { margin-top: 12px; padding: 10px; width: 100%; max-width: 360px; }
+  ul { max-width: 360px; margin: 20px auto; padding: 0; list-style: none; }
+  ul li { background: white; margin-bottom: 4px; padding: 8px; border-radius: 4px; box-shadow: 0 0 4px #ccc; }
+  #formContainer {
+    max-width: 360px;
+    margin: 20px auto;
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    box-shadow: 0 0 8px #ccc;
+  }
+  #formContainer.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h2>📱 QR-Code Scanner mit Lager-Auswahl</h2>
+
+<label for="lagerSelect">Wähle Lager:</label>
+<select id="lagerSelect">
+  <option value="">-- Bitte auswählen --</option>
+  <option value="Reifenlager Anhänger">Reifenlager Anhänger</option>
+  <option value="Reifenlager Garagenbox 2">Reifenlager Garagenbox 2</option>
+  <option value="Reifenlager Garagenbox 4">Reifenlager Garagenbox 4</option>
+  <option value="Sonstige">Sonstige</option>
+</select>
+
+<button id="startScanBtn" disabled>Scan starten</button>
+
+<div id="reader" style="display:none;"></div>
+
+<div id="formContainer" class="hidden">
+  <h3>Details zum Scan</h3>
+  <form id="detailsForm">
+    <label for="name">Name Vorname</label>
+    <input type="text" id="name" required />
+
+    <label for="fahrzeug">Fahrzeug</label>
+    <input type="text" id="fahrzeug" required />
+
+    <label for="anzugsdrehmoment">Anzugsdrehmoment</label>
+    <input type="text" id="anzugsdrehmoment" required />
+
+    <label for="schraubenMuttern">Schrauben Muttern</label>
+    <input type="text" id="schraubenMuttern" required />
+
+    <label for="tpms">TPMS</label>
+    <input type="text" id="tpms" required />
+
+    <button type="submit">Speichern</button>
+  </form>
+</div>
+
+<h3>Erfasste Einträge</h3>
+<ul id="entryList"></ul>
+
+<button id="downloadCsvBtn" style="display:none;">CSV herunterladen</button>
+
+<script>
+  const lagerSelect = document.getElementById('lagerSelect');
+  const startScanBtn = document.getElementById('startScanBtn');
+  const reader = document.getElementById('reader');
+  const formContainer = document.getElementById('formContainer');
+  const detailsForm = document.getElementById('detailsForm');
+  const entryList = document.getElementById('entryList');
+  const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+
+  let currentLager = '';
+  let currentScanText = '';
+  const entries = []; // Array mit Objekten: {name, fahrzeug, anzugsdrehmoment, schraubenMuttern, tpms}
+
+  // Lagerauswahl aktiviert Scan-Button
+  lagerSelect.addEventListener('change', () => {
+    currentLager = lagerSelect.value;
+    startScanBtn.disabled = currentLager === '';
+  });
+
+  startScanBtn.addEventListener('click', () => {
+    if(!currentLager) return alert('Bitte zuerst Lager auswählen!');
+    reader.style.display = 'block';
+    startScanBtn.disabled = true;
+    lagerSelect.disabled = true;
+    downloadCsvBtn.style.display = 'inline-block';
+    startScanner();
+  });
+
+  let scanner;
+
+  function startScanner() {
+    scanner = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: 250 };
+    scanner.start(
+      { facingMode: "environment" },
+      config,
+      onScanSuccess,
+      onScanFailure
+    ).catch(err => {
+      alert('Fehler beim Starten der Kamera: ' + err);
+    });
+  }
+
+  function onScanSuccess(decodedText, decodedResult) {
+    // Stop Scan bis Form ausgefüllt wird
+    scanner.pause();
+    currentScanText = decodedText;
+    showForm();
+  }
+
+  function onScanFailure(error) {
+    // Ignorieren
+  }
+
+  function showForm() {
+    formContainer.classList.remove('hidden');
+    detailsForm.reset();
+    document.getElementById('name').focus();
+  }
+
+  detailsForm.addEventListener('submit', e => {
+    e.preventDefault();
+    // Daten aus Formular holen
+    const name = document.getElementById('name').value.trim();
+    const fahrzeug = document.getElementById('fahrzeug').value.trim();
+    const anzugsdrehmoment = document.getElementById('anzugsdrehmoment').value.trim();
+    const schraubenMuttern = document.getElementById('schraubenMuttern').value.trim();
+    const tpms = document.getElementById('tpms').value.trim();
+
+    // Eintrag speichern
+    entries.push({
+      name, fahrzeug, anzugsdrehmoment, schraubenMuttern, tpms, qrData: currentScanText
+    });
+
+    updateEntryList();
+    formContainer.classList.add('hidden');
+    scanner.resume();
+  });
+
+  function updateEntryList() {
+    entryList.innerHTML = '';
+    entries.forEach((entry, idx) => {
+      const li = document.createElement('li');
+      li.textContent = `${entry.name} | ${entry.fahrzeug} | ${entry.anzugsdrehmoment} | ${entry.schraubenMuttern} | ${entry.tpms}`;
+      entryList.appendChild(li);
+    });
+  }
+
+  downloadCsvBtn.addEventListener('click', () => {
+    if(entries.length === 0) {
+      alert('Keine Einträge zum Exportieren!');
+      return;
+    }
+
+    // CSV erzeugen
+    // Lager als erste Zeile (Groß und Fett kann in CSV nicht direkt - stattdessen als Kommentar mit ##)
+    let csv = `## Lager: ${currentLager}\n`;
+    csv += `Name Vorname,Fahrzeug,Anzugsdrehmoment,Schrauben Muttern,TPMS\n`;
+
+    entries.forEach(entry => {
+      // Escaping von Kommas etc. wenn nötig
+      const row = [
+        entry.name,
+        entry.fahrzeug,
+        entry.anzugsdrehmoment,
+        entry.schraubenMuttern,
+        entry.tpms
+      ].map(f => `"${f.replace(/\"/g, '""')}"`).join(',');
+      csv += row + '\n';
+    });
+
+    // CSV Download starten
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qr_liste_${currentLager.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Service Worker Registrierung (optional)
+  if('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>
